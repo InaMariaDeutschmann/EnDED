@@ -1,7 +1,5 @@
 # EnDED - Environmentally-Driven Edge Detection Program
-
 <img src="logo_EnDED.png" alt="drawing" width="200"/>
-
 ## Disentangling environmental effects in microbial association networks
 Even though ecological interactions among microbes are fundamental for ecosystem functioning,
  most of them remain unknown. High-throughput omics can help unveiling microbial interactions
