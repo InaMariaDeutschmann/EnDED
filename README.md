@@ -414,6 +414,10 @@ We build up on three methods, namely Sign Pattern, Interaction
 Additionally, the co-occurrence of the X and Y is determined that
  may be used filter and analyse the network further.
 
+## Please cite as
+Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Karoline Faust and Ramiro Logares (2019). EnDED - Environmentally-Driven Edge Detection Program
+https://doi.org/10.5281/zenodo.3271730
+
 ## Version
 EnDED_v1.0.1, 15. June  2019
 
