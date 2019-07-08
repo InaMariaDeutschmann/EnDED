@@ -1,0 +1,118 @@
+
+#####################################################
+
+./../build/EnDED
+	Version 1
+	June 15th 2019
+	Ina Maria Deutschmann
+#####################################################
+
+
+Your command was: 
+./../build/EnDED --input_network_file Input/network.txt --methods SP,OL,II,DPI,CO --SP_colnum_interaction_score 3 --OL_colnum_interactionlength_startX_startY 8,6,7 --II_DPI_abundance_file Input/ID_abundance.txt --II_DPI_ENVparameter_file Input/ENV_parameters.txt --output_network_file Output/extended_network.txt --output_triplet_info Output/triplet_info.txt --output_discretized_vectors Output/disc_vectors.txt --do_pre_jointP_comp --II_permutation_iteration 100 
+
+
+Versions:
+GNU GCC/G++: 4.2.1
+boost: 1.64.0
+
+
+Settings:
+
+Input Files
+	The input network filename: Input/network.txt
+	The abundances filename: Input/ID_abundance.txt
+	The ENV-parameter filename: Input/ENV_parameters.txt
+
+Output Files
+	The output network filename: Output/extended_network.txt
+	The triplet output filename:  Output/triplet_info.txt
+	The discretized vectors output filename: Output/disc_vectors.txt
+
+Nodes
+	node X is assumed to be in column 1
+	node Y is assumed to be in column 2
+
+ID-ENV edges
+	The features names are assumed to contain the identifier: "ENV"
+	The extended network file (output) will contain ID-ENV edges.
+
+
+Separators
+	The separator in the network file is assumed to be "tab"
+
+	The separator in the abundance file is assumed to be "tab"
+
+
+selected Method(s)
+	Sign Pattern (SP)
+	Overlap (OL)
+	Interaction Information (II)
+	Data Processing Inequality (DPI) (minimum Mutual Information)
+	Co-Occurrence (CO)
+not selected Method(s)
+	-
+
+
+Method(s) Setting(s)
+
+  Combination strategy of considering an edge indirect.
+	Threshold(in percentage) for minimum methods that suggest edge as indirect: 100.000000
+	Threshold(in percentage) for minimum triplets that suggest edge as indirect: 1.000000
+
+  Sign Pattern
+	The interaction score is assumed to be in column 3
+
+  Overlap
+	The interaction length is assumed to be in column 8
+	The interaction start of node X is assumed to be in column 6
+	The interaction start of node Y is assumed to be in column 7
+	Threshold of the overlap in percentage: 60.000000
+
+  Interaction Information
+	significance_level: 0.050000
+	number of permutations: 100
+	ENV-vector will be permuted and stored before examining the networks triplets.
+	And in addition Joint Probabilities with them will be precomputed and also stored.
+
+  Data Processing Inequality
+	min mutual information(MI) threshold for MI comparison: 0.000000
+
+  Interaction Information and Data Processing Inequality
+	Threshold(in percentage) for maximum portion of 'nan' in vectors used for II and DPI: 20.000000
+
+
+To compute the significance of the interaction information, we are randomizing the environmental abundance table with the seed: 94083199
+
+Reading in Input/ID_abundance.txt
+
+Reading in Input/ENV_parameters.txt
+
+Reading in Input/network.txt to get ID-ENV edges
+
+Reading in Input/network.txt for indirect edge detection
+
+Trackers:
+5 ENVs are connected to at least one ID parameter.
+424 of 424 ID-ENV edges are considered.
+424 ID-ENV edges are within at least one triplet.
+7 ENV-ENV edges.
+29519 ID-ID edges.
+16937 ID-ID edges that are not in a triplet.
+293 IDs are connected to at least one ENV parameter.
+12582 ID-ID edges that are in at least one triplet.
+ Determination of indirect edges:
+ Sign Pattern: 12582 indirect, 16937 not indirect
+ Overlap: 12576 indirect, 16943 not indirect
+ Interaction Information: 3220 indirect, 26299 not indirect
+ Data Processing Inequality: 2085 indirect, 27434 not indirect
+ Method combination: 556 indirect, 28963 not indirect
+
+Done!
+
+Computing time:
+Start: 2019-06-15_11h02min25sec
+End:   2019-06-15_11h03min52sec
+
+in sec:          87
+in hour:min:sec: 0:1:27
