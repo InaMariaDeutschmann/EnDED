@@ -1,6 +1,6 @@
 # EnDED - Environmentally-Driven Edge Detection Program
 
-![EnDED Logo](logo_EnDED.png)
+<img src="logo_EnDED.png" alt="drawing" width="200"/>
 
 ## Disentangling environmental effects in microbial association networks
 Even though ecological interactions among microbes are fundamental for ecosystem functioning,
