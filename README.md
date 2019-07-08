@@ -1,4 +1,5 @@
 <img src="logo_EnDED.png" alt="drawing" width="200"/>
+
 # Environmentally-Driven Edge Detection Program
 ## Disentangling environmental effects in microbial association networks
 Even though ecological interactions among microbes are fundamental for ecosystem functioning,
