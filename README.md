@@ -1,5 +1,5 @@
 <img src="logo_EnDED.png" alt="drawing" width="200"/>
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3271730.svg)](https://doi.org/10.5281/zenodo.3271730)
 # Environmentally-Driven Edge Detection Program
 ## Disentangling environmental effects in microbial association networks
 Even though ecological interactions among microbes are fundamental for ecosystem functioning,
