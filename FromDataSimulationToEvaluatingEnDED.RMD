@@ -1,0 +1,551 @@
+# From data simulation to evaluating EnDED
+Ina Maria Deutschmann, 12th May 2020
+
+EnDED (Environmentally-Driven Edge Detection) is a program to detect indirect associations in a network.
+This script will simulate abundance data without and with noise, construct networks, apply EnDED, and evaluate EnDED
+
+# Data simulation
+The following script was run with the version R-3.5.0
+
+## Parameters for data simulation
+```{r}
+NUMBER_SIMULATIONS = 1000                         # Number of simulation datasets to evaluate EnDED on
+NUM_SPECIES = 50                                  # Number of species
+NUM_SAMPLES = 100                                 # Number of samples
+SAMPLE_RESOLUTION = 0.5                           # Step size of time series
+TIME_BEGIN = 0                                    # Start of time series
+TIME_END = (NUM_SAMPLES - 1) * SAMPLE_RESOLUTION  # End of time series
+SELF_INTERACTION_SCORE = -0.5                     # score in interaction matrix on diagonal (controls max population size that an environment can sustain)
+PEP = 30                                          # Percentage of positive edges
+INTERACTION_PROB = 0.01                           # Interaction probability
+ENV_INITIAL_ABUNDANCE = 0.001                     # Initial abundance of ENV included in interaction matrix
+ENV_OPT_ENV = 0.5                                 # Optimal environmental value of ENV included in interaction matrix
+ENV_MAX_GRO = 0.8                                 # Maximum growth rate of ENV included in interaction matrix
+ENV_ECO_TOL = 0.5                                 # Ecological tolerance of ENV included in interaction matrix
+T_SIGNAL_PERIO = 12                               # Signal periodicity of seasonal environmental function
+OMEGA_SIG_FREQ = -2*pi/T_SIGNAL_PERIODICITY       # Signal frequency of seasonal environmental function
+PATH = "1_datatables/"                            # Folder to store simulated files
+```
+
+## Dependencies
+load required packages:
+```{r}
+library(deSolve)
+library(seqtime)
+library(tidyverse)
+library(igraph)
+```
+
+## Time
+time series starts with TIME_BEGIN and ends with TIME_END, the time resolution gives the step count of the time series
+```{r}
+t <- seq(from=TIME_BEGIN, to = TIME_END, by=SAMPLE_RESOLUTION)
+```
+
+## Environmental parameter
+For the environmental factor the periodic function sinus is used and rounded to 3 digits.
+```{r}
+ENV <- function(t, digits = 3) { round(sin(OMEGA_SIG_FREQ*t), digits = 3) }
+```
+
+## Simulating datasets
+```{r}
+for( simulation_number in c(1:NUMBER_SIMULATIONS))
+{
+  print(paste("# Simulation number ", simulation_number, sep =""))
+  
+  ## Initial Abundance: To generate intial abundances we use a function of `seqtime` called `generateAbundances` with mode 5, which generates uneven initial abundances without introducing zeros. Mode 5 uses the `bstick` function from `vegan`. With the function 'count' you can control the total number of individuals, but we will keep it to 1 to get relative abundance.
+  y <- generateAbundances(NUM_SPECIES, count = 1, mode = 5)
+  y_ENV <- c(y,ENV_INITIAL_ABUNDANCE)
+  
+  ## Growth Rates
+  # The growth rate, g, of each species depends on the same environmental variable. The dependency is explained through the function:
+  #  g = f(env, max, opt, tol) = ( max^2 ) x ( exp(-(opt-env)^2 / ( 2 x tol^2 ) ) )
+  # with
+  #  env = the environmental value that the species growth rate depends on,
+  #  max = the species specific maximum growth rate that determines the amplitude of the growth-rate curve
+  #  opt = the species specific optimal environmental value that determines the peak of the growth-rate curve, and
+  #  tol = the species specific ecological tolerance determines the environmental range in which the species is able to grow, which determines the length of the growth-rate curve.
+  
+  ### Species specific parameters: Each species is defined through their optimal environmental value, maximum growth rate and ecological tolerance. All values are drawn from a uniform distribution.
+  # optimal environmental value
+  OPT_ENV = round( runif(NUM_SPECIES, min = min(ENV(t)), max = max(ENV(t))), digits = 3 )
+  # maximum growth rate
+  MAX_GRO = round( runif(NUM_SPECIES, min = 0.3, max = 1), digits = 3 )
+  # ecological tolerance
+  ECO_TOL = round( runif(NUM_SPECIES, min = 0.3, max = 1), digits = 3 )                          
+  
+  #### With ENV
+  # optimal environmental value
+  OPT_ENV = c(OPT_ENV, ENV_OPT_ENV)
+  # maximum growth rate
+  MAX_GRO = c(MAX_GRO, ENV_MAX_GRO)
+  # ecological tolerance
+  ECO_TOL = c(ECO_TOL, ENV_ECO_TOL)                          
+  
+  ### Growth Rate Function: Given the above parameters, the growth rate of each species is a function that depends on the environmental value.
+  growth_rate_function <- function(env,max=1,opt=0,tol=1) { 
+    exp(-1*((opt-env)^2)/(2*(tol^2)))*(max^2)} 
+  
+  get_growth_rates <- function (t, n = NUM_SPECIES+1) {
+    g <- growth_rate_function(ENV(t),MAX_GRO[1],OPT_ENV[1],ECO_TOL[1])
+    for(i in c(2:n))
+    {
+      g <- rbind(g,growth_rate_function(ENV(t),MAX_GRO[i],OPT_ENV[i],ECO_TOL[i]))
+    }
+    return(g)
+  }
+  
+  ## Lotka-Volterra Model
+  # Below is an adjusted generalized Lotka-Volterra model with:
+  #  - t: time point
+  #  - y: vector with current values of state variables
+  #  - b: vector of growth rates determined through species specific growth rate functions that depend on an environmental factor
+  #  - I: Interaction Matrix
+  glv_ENV <-function(t, y, I){
+    b = get_growth_rates(t) # vector of growth rates
+    dydt <- y*(b+I %*% y)
+    list(dydt)
+  }
+  
+  ## Interaction Matrix
+  ### Interaction between species: 
+  ### The growth rates of the species are depended on the environment, and here there are also pairwaise interactions between the species.
+  ### These interactions are determined through the Klemm-Eguiluz algorithm to generate a modular and scale-free interaction matrix with
+  ### diagonal elements set to zero. Afterwards these diagonal entries, which represent the caring capacity, are set to a negative value.
+  I_interaction = generateA(NUM_SPECIES, "klemm", pep=PEP, c=INTERACTION_PROB, d=0)
+  diag(I_interaction) <- SELF_INTERACTION_SCORE
+  
+  ### One seasonal abiotic and one abiotic environmental dependency within the interaction matrix: The environmental dependency is a entry
+  ### in the matrix, it "interacts" positively with one half and negatively with the other half. The interaction is directional, thus the
+  ### species to ENV score is 0.
+  # same bioticENV values as above
+  com1 <- floor(NUM_SPECIES/2)
+  com2 <- ceiling(NUM_SPECIES/2)
+  abioticENV = c(round( runif(com1, min = -0.8, max = -0.2), digits = 3),round( runif(com2, min = 0.2, max = 0.8), digits = 3))
+  
+  I_interaction <- cbind(I_interaction,abioticENV)
+  I_interaction <- rbind(I_interaction,c(rep(0,(NUM_SPECIES)),SELF_INTERACTION_SCORE))
+  
+  ## Simulate Abundances of Species in time
+  try(
+    {
+      abundance_table <- lsoda(y=y_ENV, times=t, func=glv_ENV, parms=I_interaction)
+    }
+    ,silent = TRUE
+  )
+  
+  # Save data
+  ROOTPATH <- paste(PATH, "Simulation_", simulation_number, sep = "")
+  dir.create(ROOTPATH)
+  
+  ## Parameters
+  s <- paste("# Parameters for data simulation\n# Number of species\nNUM_SPECIES = ", NUM_SPECIES,
+             "\n# Number of samples\nNUM_SAMPLES = ", NUM_SAMPLES,
+             "\n# Step size of time series\nSAMPLE_RESOLUTION = ", SAMPLE_RESOLUTION,
+             "\n# Start of time series\nTIME_BEGIN = ", TIME_BEGIN,
+             "\n# End of time series = (NUM_SAMPLES - 1) * SAMPLE_RESOLUTION\nTIME_END = ", TIME_END,
+             "\n# Score in interaction matrix on diagonal (controls max population size of a species that an environment can sustain)\nSELF_INTERACTION_SCORE = ", SELF_INTERACTION_SCORE,
+             "\n# Percentage of positive edges in interaction matrix\nPEP = ", PEP,
+             "\n# Interaction probability\n\tINTERACTION_PROB = ", ENV_INITIAL_ABUNDANCE,
+             "\n\toptimal environmental value = ", ENV_OPT_ENV,
+             "\n\tmaximum growth rate = ", ENV_MAX_GRO,
+             "\n\tecological tolerance = ", ENV_ECO_TOL,
+             "\n# ENV-function\nENV <- function(t, digits = 3) { round(-1*sin(pi*t/6), digits = 3) }",
+             "\n# Initial Abundance\ny <- generateAbundances(NUM_SPECIES, count = 1, mode = 5)",
+             "\n# Growth Rate Function\ngrowth_rate_function <- function(env,max,opt,tol) { exp(-1*((opt-env)^2)/(2*(tol^2)))*(max^2) }",
+             "\n# Growth Rate Parameters in file\n'growth_rates_parameters.txt'",
+             "\n# Interaction Matrix in files\n'InteractionMatrix_*.txt",
+             "\n# Abundance table in file\n'species_abundances_*.txt",
+             sep = "")
+  fileConn <-file( paste( ROOTPATH, "/parameters.txt", sep = "" ))
+  writeLines(s, fileConn)
+  close(fileConn)
+  
+  ## Environmental parameter
+  E <- cbind("ENV_seasonal",t(ENV(t)))
+  colnames(E) <- c("Name", paste("Sample_",c(1:length(t)),sep=""))
+  filename <- paste( ROOTPATH, "/env_values.txt", sep = "" )
+  write.table(E,file = filename, col.names = TRUE,row.names = FALSE,
+              quote = FALSE, sep = '\t', dec = '.')
+  
+  ## Growth Rates
+  G <- cbind( c(paste("Species_",c(1:NUM_SPECIES),sep=""), "ENV_matrix"), MAX_GRO, OPT_ENV, ECO_TOL)
+  colnames(G) <- c("Name", "Max_Growth_Rate", "Optimal_environment", "Ecological_tolerance")
+  filename <- paste( ROOTPATH, "/growth_rates_parameters.txt", sep = "" )
+  write.table(G, file = filename, col.names = TRUE, row.names = FALSE,
+              quote = FALSE, sep = '\t', dec = '.')
+  
+  ## Interaction Matrix
+  I <- cbind(c(paste("Species_",c(1:NUM_SPECIES),sep=""),"ENV_matrix"),I_interaction)
+  colnames(I) <- c("Name",paste("Species_",c(1:NUM_SPECIES),sep=""),"ENV_matrix")
+  filename <- paste( ROOTPATH, "/InteractionMatrix.txt", sep = "" )
+  write.table(I,file=filename,sep="\t",quote=FALSE,na = "NA",row.names=FALSE,col.names=TRUE)
+
+  ### Edgelist
+  node1 <- rep(paste("Species_",c(1:NUM_SPECIES),sep=""), NUM_SPECIES)
+  node2 <- rep(paste("Species_",c(1:NUM_SPECIES),sep=""), each = NUM_SPECIES)
+  interaction_score <- rep(0, length(node1))
+  I <- I_interaction[c(1:NUM_SPECIES), c(1:NUM_SPECIES)]
+  for(i in which(I != 0))
+  {
+    interaction_score[i] <- I[i]
+  }
+  edgelist <- data.frame(node1, node2, interaction_score)
+  edgelist <- edgelist[which(edgelist$interaction_score != 0),]
+  edgelist <- edgelist[-which(edgelist$node1 == edgelist$node2),]
+  filename <- paste( ROOTPATH, "/Edgelist.txt", sep = "" )
+  write.table(edgelist,file=filename,sep="\t",quote=FALSE,na = "NA",row.names=FALSE,col.names=TRUE)
+  
+  n = NUM_SPECIES + 1
+  node1 <- rep(c(paste("Species_",c(1:NUM_SPECIES),sep=""), "ENV_matrix"), n)
+  node2 <- rep(c(paste("Species_",c(1:NUM_SPECIES),sep=""), "ENV_matrix"), each = n)
+  interaction_score <- rep(0, length(node1))
+  for(i in which(I_interaction != 0))
+  {
+    interaction_score[i] <- I_interaction[i]
+  }
+  edgelist <- data.frame(node1, node2, interaction_score)
+  edgelist <- edgelist[which(edgelist$interaction_score != 0),]
+  edgelist <- edgelist[-which(edgelist$node1 == edgelist$node2),]
+  filename <- paste( ROOTPATH, "/Edgelist_withENV.txt", sep = "" )
+  write.table(edgelist,file=filename,sep="\t",quote=FALSE,na = "NA",row.names=FALSE,col.names=TRUE)
+  
+  ## Abundances of Species in time
+  A <- cbind(c(paste("Species_",c(1:NUM_SPECIES),sep=""),"ENV_matrix"), 
+             round(t(abundance_table[,c(2:(NUM_SPECIES+2))]),digits=3))
+  colnames(A) <- c("Name", paste("Sample_",c(1:length(t)),sep=""))
+  filename <- paste( ROOTPATH, "/species_abundances_with_ENV_matrix.txt", sep = "" )
+  write.table(A,file = filename,col.names = TRUE,row.names = FALSE,
+              quote = FALSE, sep = '\t', dec = '.')
+
+  ## Save R session
+  #filename = paste( ROOTPATH, "/DataSimulationSession.RData", sep = "" )
+  #save.image( file = filename )
+}
+```
+
+
+# Network construction with eLSA
+##############################################
+For each of the simulation datasets, the following command was run with the version: elsa/81a2ee0
+```{bash}
+echo "Network Construction for simulation dataset ${SLURM_ARRAY_TASK_ID}"
+cd 1_datatables/Simulation_${SLURM_ARRAY_TASK_ID}/
+
+## Combining species abundances with environmental factors and commentaing out header
+less species_abundances_with_ENV_matrix.txt > SpENV.txt
+tail -n +2 env_values.txt >> SpENV.txt
+sed -i '1 s/^/#/' SpENV.txt
+
+## Setting going to output folder and setting path to file
+cd ../../2_network_eLSA
+X=../1_datatables/Simulation_${SLURM_ARRAY_TASK_ID}/SpENV.txt
+
+## Network construction with eLSA
+MY_SAMPLE_COUNT="$(head -n 1 $X | awk '{$1=""}1' | awk '{print NF}')"
+lsa_compute $X NW_eLSA_${SLURM_ARRAY_TASK_ID}.txt -r 1 -s $MY_SAMPLE_COUNT -d 0 -p mix -x 2000 -n percentileZ
+
+## Filter eLSA output for significant associations: p and q value < 0.001
+head -n 1 NW_eLSA_${SLURM_ARRAY_TASK_ID}.txt > NW_eLSA_QP-001_${SLURM_ARRAY_TASK_ID}.txt
+awk '{ if (($21<0.001) && ($10<0.001)){print} }' NW_eLSA_${SLURM_ARRAY_TASK_ID}.txt >> NW_eLSA_QP-001_${SLURM_ARRAY_TASK_ID}.txt
+```
+
+
+# EnDED
+EnDED is a C++ program, for running a C++ program we used version gnu7/7.3.0
+
+```{bash}
+## Parameters
+METHODS=SP,OL,II,DPI
+INPUT_NW=../2_network_eLSA/NW_eLSA_QP-001_${SLURM_ARRAY_TASK_ID}.txt
+INPUT_II_DPI_ABUND=../1_datatables/Simulation_${SLURM_ARRAY_TASK_ID}/SpENV.txt
+OUTPUT_TRIPLET=EnDED_NW_Triplet_${SLURM_ARRAY_TASK_ID}.txt
+OUTPUT_NW=EnDED_NW_${SLURM_ARRAY_TASK_ID}.txt
+
+## Running EnDED
+./../../EnDED/build/EnDED --input_network_file $INPUT_NW --input_node_col 1,2 --methods ${METHODS} --SP_colnum_interaction_score 3 --OL_colnum_interactionlength_startX_startY 8,6,7 --II_DPI_abundance_file $INPUT_II_DPI_ABUND --output_network_file $OUTPUT_NW --output_triplet_info $OUTPUT_TRIPLET --do_pre_jointP_comp --II_permutation_iteration 1000
+
+## Renaming log file to carry data simulation ID (otherwise it would have time stamp)
+echo log_* > LOG_EnDED_NW_eLSA_QP-05_${SLURM_ARRAY_TASK_ID}.txt
+less log_* >> LOG_EnDED_NW_eLSA_QP-05_${SLURM_ARRAY_TASK_ID}.txt
+rm log_*
+```
+  
+
+# Evaluation
+The evaluation was done through exact matching, a code implemented in C++ for which we used version gnu7/7.3.0
+
+```{bash}
+## Setting input files
+EnDED_NW=../3_EnDED/EnDED_NW_${SLURM_ARRAY_TASK_ID}.txt
+Evaluation_Edgelist=../1_datatables/Simulation_${SLURM_ARRAY_TASK_ID}/Edgelist.txt
+
+## evaluation (exact string matching)
+../../network_evaluation/evaluate_nw --nw_file EnDED_NW_eLSA_QP-001.txt --evaluation_file ../../1_datatables/Edgelist_bioticENV.txt --col_x_y_nw 1-2 --col_x_y_evaluation 1-2 --only_evaluation_indicator --output_filename evaluated_network_eLSA_QP-001.txt
+
+## clean up and renaming of logflie
+rm evaluation_info.txt
+cp logfile.txt LOG_Evaluation_eLSA_QP-001.txt
+rm logfile.txt
+```
+
+## Overview table
+The evaluation script added an extra column to the network file indicating if the edge was found in the true edgelist. Using the same list, and the evaluated network file, an overview table is constructed.
+
+### Initialize Dataframe
+```{r}
+dt <- data.frame( ID = character(),
+                  method = character(),
+                  num_species = numeric(),
+                  num_nodes = numeric(),
+                  num_edges = numeric(),
+                  num_possible_edges = numeric(),
+                  TP = numeric(),
+                  TN = numeric(),
+                  FP = numeric(),
+                  FN = numeric(),
+                  TPR = numeric(),
+                  TNR = numeric(),
+                  PPV = numeric(),
+                  ACC = numeric(),
+                  ACCnoTN = numeric(),
+                  classified_indirect = numeric(),
+                  classified_not_indirect = numeric(),
+                  classified_indirect_was_TP = numeric(),
+                  classified_indirect_was_FP = numeric(),
+                  classified_not_indirect_was_TP = numeric(),
+                  classified_not_indirect_was_FP = numeric(),
+                  not_classified_was_TP = numeric(),
+                  not_classified_was_FP = numeric(),
+                  stringsAsFactors = FALSE )
+```
+
+### Functions
+```{r}
+compute_values <- function( df, vector_found, trueinteractions, num_possible_edges ){
+  G <- graph_from_edgelist(as.matrix(df), directed = FALSE)
+  num_nodes <- vcount(G)
+  num_edges <- ecount(G)
+  TP <- sum(vector_found, na.rm = TRUE)
+  FP <- dim(df)[1] - TP
+  FN <- dim(trueinteractions)[1] - TP
+  TN <- num_possible_edges - TP - FP - FN
+  P <- TP + FN
+  N <- TN + FP
+  TPR <- TP / P
+  TNR <- TN / N
+  PPV <- TP / (TP + FP)
+  ACC <- (TP + TN) / (P + N)
+  ACCnoTN <- 0.5 * ( TPR + PPV )
+  
+  return( c( num_nodes, num_edges, num_possible_edges, TP, TN, FP, FN, TPR, TNR, PPV, ACC, ACCnoTN ) )
+}
+
+count_classfied_edges <- function( nw, method, threshold = 0){
+  if( method == "beforeEnDED" ){
+    classified_indirect <- classified_not_indirect <- classified_indirect_was_TP <- classified_indirect_was_FP <- classified_not_indirect_was_TP <- classified_not_indirect_was_FP <- not_classified_was_TP <- not_classified_was_FP <- "NA"
+  }else if( method == "Combi_EnDED" ){
+    classified_indirect <- length(which(nw$COMBI_SP_II_DPI == "0"))
+    classified_not_indirect <- length(which(nw$COMBI_SP_II_DPI == "1"))
+    classified_indirect_was_TP <- length(which(nw$COMBI_SP_II_DPI == "0" & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$COMBI_SP_II_DPI == "0" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$COMBI_SP_II_DPI == "1" & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$COMBI_SP_II_DPI == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$COMBI_SP_II_DPI) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$COMBI_SP_II_DPI) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "Combi_EnDED_elsa" ){
+    classified_indirect <- length(which(nw$COMBI_SP_OL_II_DPI == "0"))
+    classified_not_indirect <- length(which(nw$COMBI_SP_OL_II_DPI == "1"))
+    classified_indirect_was_TP <- length(which(nw$COMBI_SP_OL_II_DPI == "0" & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$COMBI_SP_OL_II_DPI == "0" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$COMBI_SP_OL_II_DPI == "1" & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$COMBI_SP_OL_II_DPI == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$COMBI_SP_OL_II_DPI) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$COMBI_SP_OL_II_DPI) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "SignPattern_EnDED" ){
+    classified_indirect <- length(which(nw$SignPattern == "0"))
+    classified_not_indirect <- length(which(nw$SignPattern == "1"))
+    classified_indirect_was_TP <- length(which(nw$SignPattern == "0" & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$SignPattern == "0" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$SignPattern == "1" & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$SignPattern == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$SignPattern) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$SignPattern) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "InteractionInformation_p05_EnDED" ){
+    classified_indirect <- length(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05))
+    classified_not_indirect <- length(which(nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)))
+    classified_indirect_was_TP <- length(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05 & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05 & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which((nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)) & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which((nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$InterationInformation) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$InterationInformation) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "InteractionInformation_noPval_EnDED" ){
+    classified_indirect <- length(which(nw$InterationInformation < 0))
+    classified_not_indirect <- length(which(nw$InterationInformation > 0))
+    classified_indirect_was_TP <- length(which(nw$InterationInformation < 0 & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$InterationInformation < 0 & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$InterationInformation > 0 & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$InterationInformation > 0 & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$InterationInformation) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$InterationInformation) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "DataProcessingInequality_EnDED" ){
+    classified_indirect <- length(which(nw$DataProcessingInequality_indirect == "0"))
+    classified_not_indirect <- length(which(nw$DataProcessingInequality_indirect == "1"))
+    classified_indirect_was_TP <- length(which(nw$DataProcessingInequality_indirect == "0" & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$DataProcessingInequality_indirect == "0" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$DataProcessingInequality_indirect == "1" & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$DataProcessingInequality_indirect == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$DataProcessingInequality_indirect) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$DataProcessingInequality_indirect) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }else if( method == "Overlap" ){
+    classified_indirect <- length(which(nw$Overlap > threshold))
+    classified_not_indirect <- length(which(nw$Overlap <= threshold))
+    classified_indirect_was_TP <- length(which(nw$Overlap > threshold & nw$found == "1"))
+    classified_indirect_was_FP <- length(which(nw$Overlap > threshold & ( is.na(nw$found) | nw$found == "0" ) ) )
+    classified_not_indirect_was_TP <- length(which(nw$Overlap <= threshold & nw$found == "1"))
+    classified_not_indirect_was_FP <- length(which(nw$Overlap <= threshold & ( is.na(nw$found) | nw$found == "0" ) ) )
+    not_classified_was_TP <- length(which( is.na(nw$Overlap) & nw$found == "1"))
+    not_classified_was_FP <- length(which( is.na(nw$Overlap) & ( is.na(nw$found) | nw$found == "0" ) ) )
+  }
+  
+  return( c(classified_indirect, classified_not_indirect, classified_indirect_was_TP, classified_indirect_was_FP,
+            classified_not_indirect_was_TP, classified_not_indirect_was_FP, not_classified_was_TP, not_classified_was_FP) )
+}
+
+new_entry <- function(ID, method, num_species, num_possible_edges, df, vector_found, trueinteractions, nw, threshold = 0 ){
+  if( method == "Overlap" ){
+    return( c( ID, paste("Overlap_", threshold, "_EnDED", sep =""), num_species, compute_values(df, vector_found, trueinteractions, num_possible_edges), count_classfied_edges( nw, method, threshold ) ) )
+  }else{
+    return( c( ID, method, num_species, compute_values(df, vector_found, trueinteractions, num_possible_edges), count_classfied_edges( nw, method, threshold ) ) )
+  }
+}
+```
+
+### creating overview table for simulated networks
+```{r}
+for( networkID in 1:1000 ){
+  # True interactions are direct, but used as indirect. Thus, multiple edges need to be removed
+  filename <- paste(PATH,"/1_datatables/Edgelist.txt",sep="")
+  trueinteractions <- read.table( filename, header = TRUE, stringsAsFactors = FALSE )[,-3] # contains multiple edges
+  for(i in c(1:dim(trueinteractions)[1]))
+  {
+    n <- as.character(trueinteractions$node1[i])
+    if( n < as.character(trueinteractions$node2[i]) )
+    {
+      trueinteractions$node1[i] <- as.character(trueinteractions$node2[i])
+      trueinteractions$node2[i] <- n
+    }
+  }
+  trueinteractions <- unique(trueinteractions)
+  
+  # Read in network (after EnDED and evaluation) and remove environmental edges
+  filename <- paste(PATH, "/4_Evaluation/evaluated_NW_", networkID, ".txt", sep = "" )
+  nw <- read.table( filename, header = TRUE, stringsAsFactors = FALSE)
+  if( length(grep("ENV",nw$X)) > 0 ){
+    nw <- nw[-grep("ENV",nw$X),]
+  }
+  if( length(grep("ENV",nw$Y)) > 0 ){
+    nw <- nw[-grep("ENV",nw$Y),]
+  }
+  
+  # Set parameters
+  ID <- networkID
+  num_species <- 50
+  num_possible_edges <- num_species * ( num_species - 1 ) / 2
+  
+  # Before any method
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "beforeEnDED", num_species,  num_possible_edges, nw[,c(1:2)], nw$found, trueinteractions, nw ))), names(dt)))
+  
+  # EnDED
+  df <- nw[,c(1:2)]
+  v <- nw$found
+  if( length(which(nw$COMBI_SP_OL_II_DPI == "0")) > 0 ){ df <- nw[-which(nw$COMBI_SP_OL_II_DPI == "0"),c(1:2)]; v <- nw$found[-which(nw$COMBI_SP_OL_II_DPI == "0")]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "Combi_EnDED_elsa", num_species,  num_possible_edges, df, v, trueinteractions, nw ))), names(dt)))
+  
+  if( length(which(nw$SignPattern == "0")) > 0 ){ df <- nw[-which(nw$SignPattern == "0"),c(1:2)]; v <- nw$found[-which(nw$SignPattern == "0")]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "SignPattern_EnDED", num_species,  num_possible_edges, df, v, trueinteractions, nw ))), names(dt)))
+  
+  if( length(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05)) > 0 ){ df <- nw[-which(nw$InterationInformation < 0 & nw$II_p_value < 0.05),c(1:2)]; v <- nw$found[-which(nw$InterationInformation < 0 & nw$II_p_value < 0.05)]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "InteractionInformation_p05_EnDED", num_species,  num_possible_edges, df, v, trueinteractions, nw ))), names(dt)))
+  
+  if( length(which(nw$InterationInformation < 0)) > 0 ){ df <- nw[-which(nw$InterationInformation < 0),c(1:2)]; v <- nw$found[-which(nw$InterationInformation < 0)]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "InteractionInformation_noPval_EnDED", num_species,  num_possible_edges, df, v, trueinteractions, nw ))), names(dt)))
+  
+  if( length(which(nw$DataProcessingInequality_indirect == "0")) > 0 ){ df <- nw[-which(nw$DataProcessingInequality_indirect == "0"),c(1:2)]; v <- nw$found[-which(nw$DataProcessingInequality_indirect == "0")]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+  dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "DataProcessingInequality_EnDED", num_species,  num_possible_edges, df, v, trueinteractions, nw ))), names(dt)))
+  
+  
+  for( o in c(10, 20, 30, 40, 50, 60, 70, 80, 90) )
+  {
+    if( length(which(nw$Overlap > o)) > 0 ){ df <- nw[-which(nw$Overlap > o),c(1:2)]; v <- nw$found[-which(nw$Overlap > o)]; }else{ df = nw[,c(1:2)]; v <- nw$found; }
+    dt <- rbind(dt, setNames(as.data.frame(t(new_entry(ID, "Overlap", num_species,  num_possible_edges, df, v, trueinteractions, nw, threshold = o ))), names(dt)))
+  }
+  
+  # Save R session and overview table
+  filename <- paste(PATH,"/Evaluation_Overview.R", sep = "")
+  save.image(filename)
+  filename <- paste(PATH,"/Overview_Evaluation.tsv", sep = "")
+  write.table(dt, filename, col.names = TRUE, row.names = FALSE, sep = "\t", dec = ".", quote = FALSE) 
+}
+```
+
+
+# Generating a simulated dataset with noise
+I already simulated the datasets above. Now I want to add external noise to them. For that I use the Poisson distribution. The parameter lamda is set to the abundance value. Thus, the new abundance with noise is randomly drawn from the Poisson distribution with lamda = abundance without noise. Then, the above scripts were applied to construct networks, apply EnDED, and evaluate EnDED.
+
+## Parameters
+```{r}
+PATH <- "1_datatables"
+INPUT <- paste(PATH, "SpENV.txt", sep = "")
+OUTPUT <- paste(PATH, "SpENV_PoissonNoise.txt", sep = "")
+COL_START <- 2
+COL_END <- 101
+ROW_START <- 1
+ROW_END <- 51
+```
+
+## Read in abundance table
+```{r}
+abd <- read.table(INPUT, head = TRUE, tab = "\t", dec = ".", stringsAsFactors = FALSE)
+```
+
+## Add noise
+```{r}
+for(i in c(ROW_START, ROW_END))
+{
+  for(j in c(COL_START, COL_END))
+  {
+    noise <- rpois(n=1, lambda=1000*abd[i,j])/1000
+    abd[i,j] <- noise
+  }
+}
+```
+
+## Save abundance+noise table
+```{r}
+write.table(abd, OUTPUT, col.names = TRUE, row.names = FALSE, quote = FALSE, tab = "\t", dec = ".")
+```
+
+## Combine species abundance (with noise) and environmental variables
+```{bash}
+cp SpENV_doublePoissonNoise.txt temp.txt
+head -n 1 SpENV.txt > SpENV_doublePoissonNoise.txt
+less temp.txt >> SpENV_doublePoissonNoise.txt
+rm temp.txt
+```
+
+# References
+## R packages
+- deSolve: Karline Soetaert, Thomas Petzoldt, R. Woodrow Setzer (2010). Solving Differential Equations in R: Package deSolve. Journal of Statistical Software, 33(9), 1--25. URL http://www.jstatsoft.org/v33/i09/ DOI 10.18637/jss.v033.i09
+- seqtime: Karoline Faust, Franziska Bauchinger, Sophie de Buyl and Leo Lahti (NA). seqtime: Time Series Analysis of Sequencing Data. R package version 0.1.1. https://github.com/hallucigenia-sparsa/seqtime
+- tidyverse: Hadley Wickham (2017). tidyverse: Easily Install and Load the 'Tidyverse'. R package version 1.2.1. https://CRAN.R-project.org/package=tidyverse
+- igraph: Csardi G, Nepusz T: The igraph software package for complex network research, InterJournal, Complex Systems 1695. 2006. http://igraph.org
+
+## Network construction with eLSA
+- Xia, L.C., Steele, J.A., Cram, J.A., Cardon, Z.G., Simmons, S.L., Vallino, J.J., Fuhrman, J.A., Sun, F.:Extended local similarity analysis (elsa) of microbial community and other time series data with replicates.BMC Systems Biology5(2), 15 (2011). doi:10.1186/1752-0509-5-S2-S1511.
+- Xia, L.C., Ai, D., Cram, J., Fuhrman, J.A., Sun, F.: Efficient statistical significance approximation for localsimilarity analysis of high-throughput time series data. Bioinformatics29(2), 230–237 (2012).doi:10.1093/bioinformatics/bts66812.
+
+## C++ code for evaluation with exact matching
+- "network_evaluation.cpp"
