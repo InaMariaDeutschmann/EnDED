@@ -183,7 +183,7 @@ or
 - `ENV` is the indicator for environmental parameter name that
 	needs to be included in node name.
 
-## Example
+## Example: test data
 ### Input data
 The folder test_data contains an example datasets that can be used
 to try out the program. The following files are included:
@@ -335,6 +335,12 @@ The command to produce the output files in the test data set is presented here:
 ```
 ./../build/EnDED --input_network_file Input/network.txt --methods SP,OL,II,DPI,CO --SP_colnum_interaction_score 3 --OL_colnum_interactionlength_startX_startY 8,6,7 --II_DPI_abundance_file Input/ID_abundance.txt --II_DPI_ENVparameter_file Input/ENV_parameters.txt --output_network_file Output/extended_network.txt --output_triplet_info Output/triplet_info.txt --output_discretized_vectors Output/disc_vectors.txt --do_pre_jointP_comp --II_permutation_iteration 100
 ```
+
+## Example: real data (used in EnDED paper)
+The folder BBMO_data contains the abundance table, ASV taxonomy assignment, network including EnDED results, and file containing all triplets with the environmental factor and how methods performed on each one of them.
+
+## Simulated data (used in EnDED paper)
+The file FromDataSimulationToEvaluatingEnDED.RMD contains R code to generate simulated abundance tables, commands to run eLSA network construction and EnDED, as well as the command to run the C++ program network_evaluation.cpp and R code used for evaluation.
 
 ## Background
 Microbial communities are not a mere collection of independent
