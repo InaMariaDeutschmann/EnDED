@@ -1,4 +1,4 @@
-# From data simulation to evaluating EnDED
+1_d# From data simulation to evaluating EnDED
 Ina Maria Deutschmann, 12th May 2020
 
 EnDED (Environmentally-Driven Edge Detection) is a program to detect indirect associations in a network.
@@ -22,7 +22,7 @@ ENV_INITIAL_ABUNDANCE = 0.001                     # Initial abundance of ENV inc
 ENV_OPT_ENV = 0.5                                 # Optimal environmental value of ENV included in interaction matrix
 ENV_MAX_GRO = 0.8                                 # Maximum growth rate of ENV included in interaction matrix
 ENV_ECO_TOL = 0.5                                 # Ecological tolerance of ENV included in interaction matrix
-T_SIGNAL_PERIO = 12                               # Signal periodicity of seasonal environmental function
+T_SIGNAL_PERIODICITY = 12                         # Signal periodicity of seasonal environmental function
 OMEGA_SIG_FREQ = -2*pi/T_SIGNAL_PERIODICITY       # Signal frequency of seasonal environmental function
 PATH = "1_datatables/"                            # Folder to store simulated files
 ```
@@ -31,9 +31,11 @@ PATH = "1_datatables/"                            # Folder to store simulated fi
 load required packages:
 ```{r}
 library(deSolve)
-library(seqtime)
 library(tidyverse)
 library(igraph)
+library(devtools)
+install_github("hallucigenia-sparsa/seqtime")  
+library(seqtime)
 ```
 
 ## Time
@@ -318,6 +320,8 @@ dt <- data.frame( ID = character(),
                   classified_not_indirect_was_FP = numeric(),
                   not_classified_was_TP = numeric(),
                   not_classified_was_FP = numeric(),
+                  listTP = character(),
+                  listTN = character(),
                   stringsAsFactors = FALSE )
 ```
 
@@ -345,6 +349,8 @@ compute_values <- function( df, vector_found, trueinteractions, num_possible_edg
 count_classfied_edges <- function( nw, method, threshold = 0){
   if( method == "beforeEnDED" ){
     classified_indirect <- classified_not_indirect <- classified_indirect_was_TP <- classified_indirect_was_FP <- classified_not_indirect_was_TP <- classified_not_indirect_was_FP <- not_classified_was_TP <- not_classified_was_FP <- "NA"
+    listTP <- "NA"
+    listTN <- "NA"
   }else if( method == "Combi_EnDED" ){
     classified_indirect <- length(which(nw$COMBI_SP_II_DPI == "0"))
     classified_not_indirect <- length(which(nw$COMBI_SP_II_DPI == "1"))
@@ -354,6 +360,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$COMBI_SP_II_DPI == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$COMBI_SP_II_DPI) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$COMBI_SP_II_DPI) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$COMBI_SP_II_DPI == "0" & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$COMBI_SP_II_DPI == "1" & nw$found == "1"), collapse = ";")
   }else if( method == "Combi_EnDED_elsa" ){
     classified_indirect <- length(which(nw$COMBI_SP_OL_II_DPI == "0"))
     classified_not_indirect <- length(which(nw$COMBI_SP_OL_II_DPI == "1"))
@@ -363,6 +371,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$COMBI_SP_OL_II_DPI == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$COMBI_SP_OL_II_DPI) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$COMBI_SP_OL_II_DPI) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$COMBI_SP_OL_II_DPI == "0" & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$COMBI_SP_OL_II_DPI == "1" & nw$found == "1"), collapse = ";")
   }else if( method == "SignPattern_EnDED" ){
     classified_indirect <- length(which(nw$SignPattern == "0"))
     classified_not_indirect <- length(which(nw$SignPattern == "1"))
@@ -372,6 +382,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$SignPattern == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$SignPattern) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$SignPattern) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$SignPattern == "0" & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$SignPattern == "1" & nw$found == "1"), collapse = ";")
   }else if( method == "InteractionInformation_p05_EnDED" ){
     classified_indirect <- length(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05))
     classified_not_indirect <- length(which(nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)))
@@ -381,6 +393,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which((nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)) & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$InterationInformation) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$InterationInformation) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$InterationInformation < 0 & nw$II_p_value < 0.05 & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which((nw$InterationInformation > 0 | (nw$InterationInformation < 0 & nw$II_p_value >= 0.05)) & nw$found == "1"), collapse = ";")
   }else if( method == "InteractionInformation_noPval_EnDED" ){
     classified_indirect <- length(which(nw$InterationInformation < 0))
     classified_not_indirect <- length(which(nw$InterationInformation > 0))
@@ -390,6 +404,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$InterationInformation > 0 & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$InterationInformation) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$InterationInformation) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$InterationInformation < 0 & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$InterationInformation > 0 & nw$found == "1"), collapse = ";")
   }else if( method == "DataProcessingInequality_EnDED" ){
     classified_indirect <- length(which(nw$DataProcessingInequality_indirect == "0"))
     classified_not_indirect <- length(which(nw$DataProcessingInequality_indirect == "1"))
@@ -399,6 +415,8 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$DataProcessingInequality_indirect == "1" & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$DataProcessingInequality_indirect) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$DataProcessingInequality_indirect) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$DataProcessingInequality_indirect == "0" & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$DataProcessingInequality_indirect == "1" & nw$found == "1"), collapse = ";")
   }else if( method == "Overlap" ){
     classified_indirect <- length(which(nw$Overlap > threshold))
     classified_not_indirect <- length(which(nw$Overlap <= threshold))
@@ -408,10 +426,13 @@ count_classfied_edges <- function( nw, method, threshold = 0){
     classified_not_indirect_was_FP <- length(which(nw$Overlap <= threshold & ( is.na(nw$found) | nw$found == "0" ) ) )
     not_classified_was_TP <- length(which( is.na(nw$Overlap) & nw$found == "1"))
     not_classified_was_FP <- length(which( is.na(nw$Overlap) & ( is.na(nw$found) | nw$found == "0" ) ) )
+    listTP <- paste(which(nw$Overlap > threshold & ( is.na(nw$found) | nw$found == "0" ) ), collapse = ";") 
+    listTN <- paste(which(nw$Overlap <= threshold & nw$found == "1"), collapse = ";")
   }
   
   return( c(classified_indirect, classified_not_indirect, classified_indirect_was_TP, classified_indirect_was_FP,
-            classified_not_indirect_was_TP, classified_not_indirect_was_FP, not_classified_was_TP, not_classified_was_FP) )
+            classified_not_indirect_was_TP, classified_not_indirect_was_FP, not_classified_was_TP, not_classified_was_FP,
+            listTP, listTN) )
 }
 
 new_entry <- function(ID, method, num_species, num_possible_edges, df, vector_found, trueinteractions, nw, threshold = 0 ){
@@ -491,7 +512,182 @@ for( networkID in 1:1000 ){
 }
 ```
 
+# How many TP have methods in common
+```{r}
+dt_temp <- read.table(paste(PATH,"/Overview_Evaluation.tsv", sep=""), header = TRUE, sep = "\t")
+```
 
+# Example
+```{r}
+library(VennDiagram)
+# Visualization: Venn Diagram
+# SP, OL, II, DPI, COMBI
+d1 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="SignPattern_EnDED")]), split = ";")[[1]]
+d2 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="Overlap_60_EnDED")]), split = ";")[[1]]
+d3 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="InteractionInformation_p05_EnDED")]), split = ";")[[1]]
+d4 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="DataProcessingInequality_EnDED")]), split = ";")[[1]]
+d5 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="Combi_EnDED_elsa")]), split = ";")[[1]]
+input_data <- list(SP=d1, OL=d2, II=d3, DPI=d4, COMBI=d5);
+# Creates output 
+output_image_file <- paste(PATH,"/venn_TP_SP_OL_II_DPI_COMBI.tiff",sep="");
+# Configs for the diagram
+title <- "Overlap of true positives between methods";
+fill_color <- c("mediumorchid4","azure1","gray24","darkolivegreen3","orange"); # for 5 sets
+# Invoke drawing of the venn Diagram
+venn.diagram(input_data,fill=fill_color,filename=output_image_file,width=5000,height=3000,main=title);
+# percent
+output_image_file <- paste(PATH,"/venn_TP_SP_OL_II_DPI_percent.tiff",sep="");
+venn.diagram(input_data,fill=fill_color,filename=output_image_file,width=5000,height=3000,main=title,print.mode='percent');
+```
+
+```{r}
+# Heat-map
+library(purrr)
+library(RVenn)
+library(ggplot2)
+
+# SP, OL, II, DPI, COMBI
+d1 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="SignPattern_EnDED")]), split = ";")[[1]]
+d2 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="Overlap_60_EnDED")]), split = ";")[[1]]
+d3 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="InteractionInformation_p05_EnDED")]), split = ";")[[1]]
+d4 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="DataProcessingInequality_EnDED")]), split = ";")[[1]]
+d5 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==1 & dt_temp$method=="Combi_EnDED_elsa")]), split = ";")[[1]]
+input_data <- list(SP=d1, OL=d2, II=d3, DPI=d4, COMBI=d5);
+toy = Venn(input_data)
+setmap(toy, element_clustering = TRUE, set_clustering = TRUE)
+```
+
+# all
+```{r}
+dt_temp <- read.table(paste(PATH,"/Overview_Evaluation_ListTP_TN.tsv",sep=""), header = TRUE, sep = "\t")
+
+# How much overlap is between methods regarding true positive and true negative?
+dt_overlap <- data.frame( ID = character(),
+               # overlap of TP - only 1 method
+                  TP_SP = numeric(),
+                  TP_OL = numeric(),
+                  TP_II = numeric(),
+                  TP_DPI = numeric(),
+                  # overlap of TP - two methods
+                  TP_SP_OL = numeric(),
+                  # overlap of TP - three methods
+                  TP_SP_OL_II = numeric(),
+                  TP_SP_OL_DPI = numeric(),
+                  # overlap of TP - all five methods
+                  TP_SP_OL_II_DPI_COMBI = numeric(),
+                  # other
+                  TP_other = numeric(),
+                  stringsAsFactors = FALSE )
+for(i in c(min(dt_temp$ID):max(dt_temp$ID)))
+{
+  d1 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==i & dt_temp$method=="SignPattern_EnDED")]), split = ";")[[1]]
+  d2 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==i & dt_temp$method=="Overlap_60_EnDED")]), split = ";")[[1]]
+  d3 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==i & dt_temp$method=="InteractionInformation_p05_EnDED")]), split = ";")[[1]]
+  d4 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==i & dt_temp$method=="DataProcessingInequality_EnDED")]), split = ";")[[1]]
+  d5 <- strsplit(as.character(dt_temp$listTP[which(dt_temp$ID==i & dt_temp$method=="Combi_EnDED_elsa")]), split = ";")[[1]]
+  
+  input_data <- list(SP=d1, OL=d2, II=d3, DPI=d4, COMBI=d5);
+  set_all = Venn(input_data)
+  
+  # in SP but not in others
+  set_IN = d1
+  set_NOT_IN = unite(set_all, c("OL","II","DPI","COMBI"))
+  new_TP_SP = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+  
+  # in OL but not in others
+  set_IN = d2
+  set_NOT_IN = unite(set_all, c("SP","II","DPI","COMBI"))
+  new_TP_OL = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+  
+  # in II but not in others
+  set_IN = d3
+  set_NOT_IN = unite(set_all, c("SP","OL","DPI","COMBI"))
+  new_TP_II = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+  
+  # in DPI but not in others
+  set_IN = d4
+  set_NOT_IN = unite(set_all, c("SP","OL","II","COMBI"))
+  new_TP_DPI = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+
+  # in SP and OL but not in others
+  set_IN = overlap(set_all, c("SP","OL"))
+  set_NOT_IN = unite(set_all, c("II","DPI","COMBI"))
+  new_TP_SP_OL = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+
+  # in SP, OL, and II but not in others
+  set_IN = overlap(set_all, c("SP","OL","II"))
+  set_NOT_IN = unite(set_all, c("DPI","COMBI"))
+  new_TP_SP_OL_II = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+  
+  # in SP, OL, and DPI but not in others
+  set_IN = overlap(set_all, c("SP","OL","DPI"))
+  set_NOT_IN = unite(set_all, c("II","COMBI"))
+  new_TP_SP_OL_DPI = length(setdiff(set_IN, set_NOT_IN)) # in first but not in second
+  
+  # in all
+  new_TP_SP_OL_II_DPI_COMBI = length(overlap(set_all, c("SP","OL","II","DPI","COMBI")))
+  
+  # total TP?
+  total = length(unite(set_all, c("SP","OL","II","DPI","COMBI")))
+  
+  # other TP?
+  otherTP = total - new_TP_SP - new_TP_OL - new_TP_II - new_TP_DPI - new_TP_SP_OL - new_TP_SP_OL_II - new_TP_SP_OL_DPI - new_TP_SP_OL_II_DPI_COMBI
+  
+  new <- data.frame( ID = i,
+                  # unique TP in one method
+                  TP_SP = new_TP_SP/total*100,
+                  TP_OL = new_TP_OL/total*100,
+                  TP_II = new_TP_II/total*100,
+                  TP_DPI = new_TP_DPI/total*100,
+                  # overlap of TP - two methods
+                  TP_SP_OL = new_TP_SP_OL/total*100,
+                  # overlap of TP - three methods
+                  TP_SP_OL_II = new_TP_SP_OL_II/total*100,
+                  TP_SP_OL_DPI = new_TP_SP_OL_DPI/total*100,
+                  # overlap of TP - all five methods
+                  TP_SP_OL_II_DPI_COMBI = new_TP_SP_OL_II_DPI_COMBI/total*100,
+                  TP_other = otherTP/total*100,
+                  stringsAsFactors = FALSE )
+  dt_overlap <- rbind(dt_overlap, new)
+}
+
+for(i in colnames(dt_overlap)[-1])
+{
+  print(i)
+  print(summary(dt_overlap[,i]))
+}
+
+write.table(dt_overlap, paste(PATH,"/Overview_ListTP_overlap.tsv",sep=""),
+            col.names = TRUE, row.names = FALSE, sep = "\t", quote = FALSE)
+```
+[1] "TP_SP"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.2093  0.3155  0.4533  3.6585 
+[1] "TP_OL"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.1099  0.2373  0.3405  1.9950 
+[1] "TP_II"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.6522  1.2707  1.4106  1.9751  6.0364 
+[1] "TP_DPI"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.1135  0.3371  0.4436  0.6326  2.5901 
+[1] "TP_SP_OL"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  4.856  12.246  14.902  15.023  17.478  29.925 
+[1] "TP_SP_OL_II"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  19.10   29.54   32.64   32.84   36.15   49.55 
+[1] "TP_SP_OL_DPI"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  2.561   7.076   8.899   9.115  10.804  22.071 
+[1] "TP_SP_OL_II_DPI_COMBI"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  22.39   32.14   35.58   35.50   38.60   48.57 
+[1] "TP_other"
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.4338  3.3449  4.8731  5.1148  6.5583 15.3563 
+  
 # Generating a simulated dataset with noise
 I already simulated the datasets above. Now I want to add external noise to them. For that I use the Poisson distribution. The parameter lamda is set to the abundance value. Thus, the new abundance with noise is randomly drawn from the Poisson distribution with lamda = abundance without noise. Then, the above scripts were applied to construct networks, apply EnDED, and evaluate EnDED.
 
@@ -545,7 +741,22 @@ rm temp.txt
 
 ## Network construction with eLSA
 - Xia, L.C., Steele, J.A., Cram, J.A., Cardon, Z.G., Simmons, S.L., Vallino, J.J., Fuhrman, J.A., Sun, F.:Extended local similarity analysis (elsa) of microbial community and other time series data with replicates.BMC Systems Biology5(2), 15 (2011). doi:10.1186/1752-0509-5-S2-S1511.
-- Xia, L.C., Ai, D., Cram, J., Fuhrman, J.A., Sun, F.: Efficient statistical significance approximation for localsimilarity analysis of high-throughput time series data. Bioinformatics29(2), 230–237 (2012).doi:10.1093/bioinformatics/bts66812.
+- Xia, L.C., Ai, D., Cram, J., Fuhrman, J.A., Sun, F.: Efficient statistical significance approximation for localsimilarity analysis of high-throughput time series data. Bioinformatics29(2), 230???237 (2012).doi:10.1093/bioinformatics/bts66812.
 
 ## C++ code for evaluation with exact matching
 - "network_evaluation.cpp"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
