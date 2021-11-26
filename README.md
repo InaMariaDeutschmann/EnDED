@@ -420,9 +420,11 @@ We build up on three methods, namely Sign Pattern, Interaction
 Additionally, the co-occurrence of the X and Y is determined that
  may be used filter and analyse the network further.
 
-## Please cite as
-Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Karoline Faust and Ramiro Logares (2019). EnDED - Environmentally-Driven Edge Detection Program
-https://doi.org/10.5281/zenodo.3271730
+## Program citation
+Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Karoline Faust and Ramiro Logares. EnDED - Environmentally-Driven Edge Detection Program. (2019). https://doi.org/10.5281/zenodo.3271730
+
+## Corresponding article
+Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Sergio M. Vallina, Karoline Faust and Ramiro Logares. Disentangling environmental effects in microbial association networks. Microbiome 9, 232 (2021). https://doi.org/10.1186/s40168-021-01141-7
 
 ## Version
 EnDED_v1.0.1, 15. June  2019
@@ -430,6 +432,3 @@ EnDED_v1.0.1, 15. June  2019
 ## CONTACT
 <div itemscope itemtype="https://schema.org/Person"><a itemprop="sameAs" content="https://orcid.org/0000-0002-3512-261X" href="https://orcid.org/0000-0002-3512-261X" target="orcid.widget" rel="noopener noreferrer" style="vertical-align:top;"><img src="https://orcid.org/sites/default/files/images/orcid_16x16.png" style="width:1em;margin-right:.5em;" alt="ORCID iD icon">Ina Maria Deutschmann</a></div>
 ina.m.deutschmann[at]gmail.com
-
-## Preprint
-https://www.researchsquare.com/article/rs-57387/v1
