@@ -420,10 +420,11 @@ We build up on three methods, namely Sign Pattern, Interaction
 Additionally, the co-occurrence of the X and Y is determined that
  may be used filter and analyse the network further.
 
-## Program citation
+## Citation
+### Software
 Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Karoline Faust and Ramiro Logares. EnDED - Environmentally-Driven Edge Detection Program. (2019). https://doi.org/10.5281/zenodo.3271730
 
-## Corresponding article
+### Article
 Ina Maria Deutschmann, Gipsi Lima-Mendez, Anders K. Krabberød, Jeroen Raes, Sergio M. Vallina, Karoline Faust and Ramiro Logares. Disentangling environmental effects in microbial association networks. Microbiome 9, 232 (2021). https://doi.org/10.1186/s40168-021-01141-7
 
 ## Version
