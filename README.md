@@ -2,8 +2,6 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3271730.svg)](https://doi.org/10.5281/zenodo.3271730)
 ![GitHub all releases](https://img.shields.io/github/downloads/InaMariaDeutschmann/EnDED/total?logo=Github&style=flat-square)
-![Twitter URL](https://img.shields.io/twitter/url?logo=Twitter&style=flat-square&url=https%3A%2F%2Fgithub.com%2FInaMariaDeutschmann%2FEnDED)
-![Twitter Follow](https://img.shields.io/twitter/follow/ina_deutschmann?logo=Twitter&style=flat-square)
 
 # Environmentally-Driven Edge Detection Program
 ## Disentangling environmental effects in microbial association networks
@@ -436,3 +434,4 @@ EnDED_v1.0.1, 15. June  2019
 ## CONTACT
 <div itemscope itemtype="https://schema.org/Person"><a itemprop="sameAs" content="https://orcid.org/0000-0002-3512-261X" href="https://orcid.org/0000-0002-3512-261X" target="orcid.widget" rel="noopener noreferrer" style="vertical-align:top;"><img src="https://orcid.org/sites/default/files/images/orcid_16x16.png" style="width:1em;margin-right:.5em;" alt="ORCID iD icon">Ina Maria Deutschmann</a></div>
 ina.m.deutschmann[at]gmail.com
+![Twitter Follow](https://img.shields.io/twitter/follow/ina_deutschmann?logo=Twitter&style=flat-square)
