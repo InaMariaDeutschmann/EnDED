@@ -1,7 +1,6 @@
 <img src="logo_EnDED.png" alt="drawing" width="200"/>
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5784132.svg)](https://doi.org/10.5281/zenodo.5784132)
-
 ![GitHub all releases](https://img.shields.io/github/downloads/InaMariaDeutschmann/EnDED/total?logo=Github&style=flat-square)
 
 # Environmentally-Driven Edge Detection Program
