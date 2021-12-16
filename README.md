@@ -334,7 +334,7 @@ After loading all required modules, and compiling the program.
 The program can be run.
 The command to produce the output files in the test data set is presented here:
 ```
-./../build/EnDED --input_network_file Input/network.txt --methods SP,OL,II,DPI,CO --SP_colnum_interaction_score 3 --OL_colnum_interactionlength_startX_startY 8,6,7 --II_DPI_abundance_file Input/ID_abundance.txt --II_DPI_ENVparameter_file Input/ENV_parameters.txt --output_network_file Output/extended_network.txt --output_triplet_info Output/triplet_info.txt --output_discretized_vectors Output/disc_vectors.txt --do_pre_jointP_comp --II_permutation_iteration 100
+./../build/EnDED --input_network_file test_data/Input/network.txt --methods SP,OL,II,DPI,CO --SP_colnum_interaction_score 3 --OL_colnum_interactionlength_startX_startY 8,6,7 --II_DPI_abundance_file test_data/Input/ID_abundance.txt --II_DPI_ENVparameter_file test_data/Input/ENV_parameters.txt --output_network_file test_data/Output_extended_network.txt --output_triplet_info test_data/Output_triplet_info.txt --output_discretized_vectors test_data/Output_disc_vectors.txt --do_pre_jointP_comp --II_permutation_iteration 100
 ```
 
 ## Example: real data (used in EnDED paper)
