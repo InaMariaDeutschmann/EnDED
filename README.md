@@ -34,6 +34,7 @@ EnDED/build/EnDED --input_network_file [PATH/NETWORKFILE] --methods [METHODS] [o
 The program requires the 
 - gcc = GNU Compiler Collection (GCC)
 - boost = boost C++ Libraries
+
 and was tested with the versions GNU GCC/G++: 4.2.1 and boost: 1.64.0
 
 ## Get help with
